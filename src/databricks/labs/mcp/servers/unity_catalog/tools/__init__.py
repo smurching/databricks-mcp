@@ -13,6 +13,11 @@ from databricks.labs.mcp.servers.unity_catalog.tools.vector_search import (
     list_vector_search_tools,
 )
 
+from databricks.labs.mcp.servers.unity_catalog.tools.tables import (
+    list_table_search_tools,
+)
+from databricks.labs.mcp.servers.unity_catalog.tools.developer_tools import SEARCH_TOOL
+
 Content: TypeAlias = Union[TextContent, ImageContent, EmbeddedResource]
 
 
@@ -21,4 +26,6 @@ def list_all_tools(settings):
         list_genie_tools(settings)
         + list_vector_search_tools(settings)
         + list_uc_function_tools(settings)
+        + list_table_search_tools(settings)
+        + [SEARCH_TOOL]
     )
