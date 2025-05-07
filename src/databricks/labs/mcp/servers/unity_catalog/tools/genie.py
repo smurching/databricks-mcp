@@ -10,6 +10,8 @@ from databricks.sdk import WorkspaceClient
 from mcp.types import TextContent, Tool as ToolSpec
 
 from databricks.labs.mcp.servers.unity_catalog.tools.base_tool import BaseTool
+from databricks_ai_bridge.genie import Genie
+
 
 # Logger
 LOGGER = logging.getLogger(__name__)
@@ -27,72 +29,19 @@ def dump_json(maybe_model: Union[BaseModel, list, dict, None]) -> str:
 # --- Input Schemas ---
 
 
-class StartConversationInput(BaseModel):
+class AskQuestionInput(BaseModel):
     space_id: str = Field(..., description="The ID of the Genie space.")
-    content: str = Field(..., description="The text to start the conversation.")
+    content: str = Field(..., description="The text to ask the Genie space.")
 
 
-class CreateMessageInput(BaseModel):
-    space_id: str
-    conversation_id: str
-    content: str
 
-
-class GetMessageInput(BaseModel):
-    space_id: str
-    conversation_id: str
-    message_id: str
-
-
-class GetAttachmentQueryResultInput(BaseModel):
-    space_id: str
-    conversation_id: str
-    message_id: str
-    attachment_id: str
-
-
-class ExecuteAttachmentQueryInput(GetAttachmentQueryResultInput):
-    pass
-
-
-class GetSpaceInput(BaseModel):
-    space_id: str
-
-
-class GenerateDownloadInput(GetAttachmentQueryResultInput):
-    pass
-
-
-class PollMessageUntilCompleteInput(BaseModel):
-    space_id: str
-    conversation_id: str
-    message_id: str
-    timeout_seconds: int = Field(default=600)
-    poll_interval_seconds: int = Field(default=5)
-
-
-class ListSpacesInput(BaseModel):
-    pass
-
-
-# --- Tool Implementations ---
-
-
-def _start_conversation(client, args) -> list[TextContent]:
-    model = StartConversationInput.model_validate(args)
-    message = client.genie.start_conversation_and_wait(model.space_id, model.content)
+def _ask_question(client, args) -> list[TextContent]:
+    model = AskQuestionInput.model_validate(args)
+    result = Genie(model.space_id).ask_question(model.content)
     return [
         TextContent(
             type="text",
-            text=dump_json(
-                {
-                    "conversation_id": message.conversation_id,
-                    "message_id": message.message_id,
-                    "content": message.content,
-                    "status": message.status.value if message.status else None,
-                    "attachments": getattr(message, "attachments", None),
-                }
-            ),
+            text=result,
         )
     ]
 
@@ -296,67 +245,9 @@ class GenieTool(BaseTool):
 def list_genie_tools(settings) -> list[GenieTool]:
     return [
         GenieTool(
-            name="genie_start_conversation",
+            name="genie_ask_question",
             description="Start a new conversation in a Genie space.",
-            input_schema=StartConversationInput.model_json_schema(),
-            func=_start_conversation,
-        ),
-        GenieTool(
-            name="genie_create_message",
-            description="Create a message in a conversation.",
-            input_schema=CreateMessageInput.model_json_schema(),
-            func=_create_message,
-        ),
-        GenieTool(
-            name="genie_get_message",
-            description="Get a message from a conversation.",
-            input_schema=GetMessageInput.model_json_schema(),
-            func=_get_message,
-        ),
-        GenieTool(
-            name="genie_get_query_result",
-            description="Get SQL query result from a message attachment.",
-            input_schema=GetAttachmentQueryResultInput.model_json_schema(),
-            func=_get_attachment_query_result,
-        ),
-        GenieTool(
-            name="genie_execute_query",
-            description="Execute SQL query from a message attachment.",
-            input_schema=ExecuteAttachmentQueryInput.model_json_schema(),
-            func=_execute_attachment_query,
-        ),
-        GenieTool(
-            name="genie_get_space",
-            description="Get details of a Genie space.",
-            input_schema=GetSpaceInput.model_json_schema(),
-            func=_get_space,
-        ),
-        GenieTool(
-            name="genie_generate_download",
-            description="Generate download link for full query result.",
-            input_schema=GenerateDownloadInput.model_json_schema(),
-            func=_generate_download_query_result,
-        ),
-        GenieTool(
-            name="genie_poll_until_complete",
-            description="Poll a message until its status is COMPLETED or timeout.",
-            input_schema=PollMessageUntilCompleteInput.model_json_schema(),
-            func=_poll_message_until_complete,
-        ),
-        GenieTool(
-            name="genie_list_spaces",
-            description=(
-                "List available Genie spaces. Genie spaces enable structured data lookup "
-                "via a text-to-SQL interface. NOTE: Consider proactively calling this tool for "
-                "any knowledge or data retrieval question, especially including but not limited to questions "
-                "about enterprise data, because it will help you discover available "
-                "Genie spaces that you can subsequently chat with for insights. If the user asks a question that could be "
-                "answered by a structure data (database table) lookup or query against tabular data, "
-                "consider calling this tool to "
-                "discover available Genie spaces and see if it makes sense to chat with "
-                "any of them to help answer the question."
-            ),
-            input_schema=ListSpacesInput.model_json_schema(),
-            func=functools.partial(_list_spaces, space_ids=settings.genie_space_ids),
-        ),
+            input_schema=AskQuestionInput.model_json_schema(),
+            func=_ask_question,
+        )
     ]
